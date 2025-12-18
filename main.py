@@ -276,7 +276,7 @@ class AutoClickerApp:
             self.start_clicking()
 
     def start_keyboard_listener(self):
-        """Start keyboard listener for hotkey toggle"""
+        """Start keyboard listener for hotkey toggle - non-suppressing mode"""
         self._current_modifiers = {"ctrl": False, "shift": False, "alt": False}
         
         def on_press(key):
@@ -284,17 +284,17 @@ class AutoClickerApp:
                 # Track modifier keys
                 if key == pynput_keyboard.Key.ctrl_l or key == pynput_keyboard.Key.ctrl_r:
                     self._current_modifiers["ctrl"] = True
-                    return
+                    return True  # Don't suppress
                 elif key == pynput_keyboard.Key.shift or key == pynput_keyboard.Key.shift_r:
                     self._current_modifiers["shift"] = True
-                    return
+                    return True  # Don't suppress
                 elif key == pynput_keyboard.Key.alt_l or key == pynput_keyboard.Key.alt_r:
                     self._current_modifiers["alt"] = True
-                    return
+                    return True  # Don't suppress
                 
                 # Ignore hotkey when typing in entry fields
                 if self._entry_focused:
-                    return
+                    return True  # Don't suppress
                 
                 # Get the key string - handle Ctrl combinations properly
                 key_str = None
@@ -321,7 +321,7 @@ class AutoClickerApp:
                     try:
                         key_str = str(key).replace("'", "").lower()
                     except:
-                        return
+                        return True  # Don't suppress
                 
                 # Check if current key + modifiers match the hotkey combo
                 if (key_str and key_str == self.hotkey_combo["key"] and
@@ -329,8 +329,10 @@ class AutoClickerApp:
                     self._current_modifiers["shift"] == self.hotkey_combo["shift"] and
                     self._current_modifiers["alt"] == self.hotkey_combo["alt"]):
                     self.root.after(0, self.toggle)
+                
+                return True  # Don't suppress any keys
             except Exception:
-                pass
+                return True  # Don't suppress even on error
         
         def on_release(key):
             try:
@@ -341,10 +343,16 @@ class AutoClickerApp:
                     self._current_modifiers["shift"] = False
                 elif key == pynput_keyboard.Key.alt_l or key == pynput_keyboard.Key.alt_r:
                     self._current_modifiers["alt"] = False
+                return True  # Don't suppress
             except Exception:
-                pass
+                return True  # Don't suppress even on error
         
-        self._listener = pynput_keyboard.Listener(on_press=on_press, on_release=on_release)
+        # Create listener with suppress=False to ensure it never blocks keyboard input
+        self._listener = pynput_keyboard.Listener(
+            on_press=on_press, 
+            on_release=on_release,
+            suppress=False
+        )
         self._listener.start()
 
     def on_close(self):
