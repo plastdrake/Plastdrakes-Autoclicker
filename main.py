@@ -6,6 +6,10 @@ from tkinter import ttk
 from pynput import keyboard as pynput_keyboard
 import win32api
 import win32con
+import json
+import os
+import sys
+import winsound
 
 
 class AutoClickerApp:
@@ -18,10 +22,22 @@ class AutoClickerApp:
         # Configure modern sci-fi theme
         self.setup_theme()
 
-        self.cps_var = tk.DoubleVar(value=10.0)
-        self.button_var = tk.StringVar(value="Left Click")
-        self.hotkey_var = tk.StringVar(value="x")
-        self.hotkey_combo = {"ctrl": False, "shift": False, "alt": False, "key": "x"}
+        # Settings file path - use executable directory if frozen, otherwise script directory
+        if getattr(sys, 'frozen', False):
+            # Running as compiled executable
+            app_dir = os.path.dirname(sys.executable)
+        else:
+            # Running as script
+            app_dir = os.path.dirname(os.path.abspath(__file__))
+        self.settings_file = os.path.join(app_dir, 'autoclicker_settings.json')
+
+        # Load saved settings or use defaults
+        saved_settings = self.load_settings()
+        
+        self.cps_var = tk.DoubleVar(value=saved_settings.get('cps', 10.0))
+        self.button_var = tk.StringVar(value=saved_settings.get('button', 'Left Click'))
+        self.hotkey_var = tk.StringVar(value=saved_settings.get('hotkey_display', 'x'))
+        self.hotkey_combo = saved_settings.get('hotkey_combo', {"ctrl": False, "shift": False, "alt": False, "key": "x"})
         self.status_var = tk.StringVar(value="STANDBY")
 
         # Main container with rounded effect
@@ -61,6 +77,7 @@ class AutoClickerApp:
                             bg="#1a2a4a", fg="#00ffff", insertbackground="#00ffff",
                             relief="flat", borderwidth=0, highlightthickness=0)
         cps_entry.pack(padx=8, pady=6, fill="both")
+        cps_entry.bind('<FocusOut>', lambda e: self.save_settings())
 
         # Mouse button
         mb_label = tk.Label(settings_inner, text="Mouse Button", 
@@ -74,7 +91,8 @@ class AutoClickerApp:
         button_container.grid(row=1, column=1, sticky="ew", pady=10, padx=(15, 0))
         button_menu = ttk.OptionMenu(button_container, self.button_var, "Left Click", 
                                      "Left Click", "Right Click", "Middle Click",
-                                     "Space", "E", "F", "R", "Enter")
+                                     "Space", "E", "F", "R", "Enter",
+                                     command=lambda _: self.save_settings())
         button_menu.pack(fill="both")
 
         # Hotkey with click-to-capture
@@ -139,6 +157,30 @@ class AutoClickerApp:
                  background=[('active', '#2a4a6a')],
                  foreground=[('active', '#00ffff')])
 
+    def load_settings(self):
+        """Load settings from JSON file"""
+        try:
+            if os.path.exists(self.settings_file):
+                with open(self.settings_file, 'r') as f:
+                    return json.load(f)
+        except Exception:
+            pass
+        return {}
+
+    def save_settings(self):
+        """Save current settings to JSON file"""
+        try:
+            settings = {
+                'cps': self.cps_var.get(),
+                'button': self.button_var.get(),
+                'hotkey_display': self.hotkey_var.get(),
+                'hotkey_combo': self.hotkey_combo
+            }
+            with open(self.settings_file, 'w') as f:
+                json.dump(settings, f, indent=2)
+        except Exception:
+            pass
+
     def _on_entry_focus(self, focused):
         """Track when entry widgets have focus"""
         self._entry_focused = focused
@@ -196,6 +238,7 @@ class AutoClickerApp:
         self.hotkey_var.set(combo_str)
         self.hotkey_entry.config(state="readonly")
         self.root.focus_set()
+        self.save_settings()  # Save when hotkey is changed
         return "break"
 
     def get_button(self):
@@ -261,6 +304,8 @@ class AutoClickerApp:
         self._thread.start()
         self.status_var.set("✦ ACTIVE ✦")
         self.status_label.config(fg="#00ff88", font=("Segoe UI", 13, "bold"))
+        # Play activation sound (high pitch beep)
+        threading.Thread(target=lambda: winsound.Beep(1200, 100), daemon=True).start()
 
     def stop_clicking(self):
         if not self._running.is_set():
@@ -268,6 +313,8 @@ class AutoClickerApp:
         self._running.clear()
         self.status_var.set("STANDBY")
         self.status_label.config(fg="#4dd0e1", font=("Segoe UI", 13, "bold"))
+        # Play deactivation sound (low pitch beep)
+        threading.Thread(target=lambda: winsound.Beep(800, 100), daemon=True).start()
 
     def toggle(self):
         if self._running.is_set():
@@ -362,6 +409,7 @@ class AutoClickerApp:
         except Exception:
             pass
         self.stop_clicking()
+        self.save_settings()  # Save settings before closing
         self.root.destroy()
 
 
